@@ -15,14 +15,21 @@ env:
   RELEASE_CHANNEL: 'latest/edge'
 
 jobs:
-
   build:
     name: Build Binaries
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout del repositorio con todas las etiquetas y el historial completo
       - name: Checkout repo
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Importante para obtener todas las etiquetas
 
+      # 2. Instalación de 'jq' para procesar JSON
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # 3. Configuración del entorno de Node.js
       - name: Setup Node.js environment
         uses: actions/setup-node@v3
         with:
@@ -30,103 +37,140 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
 
+      # 4. Instalación de dependencias
       - name: Install Dependencies
         run: npm ci
 
+      # 5. Ejecución de Semantic Release
       - name: Semantic Release
         id: semantic
         uses: codfish/semantic-release-action@v2
         env:
-          HUSKY: 0 # Disable Husky hooks
+          HUSKY: 0 # Deshabilitar hooks de Husky
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+        continue-on-error: true  # Permite que el workflow continúe incluso si este paso falla
 
+      # 6. Capturar el resultado de Semantic Release
       - name: Set Semantic Release Result
         if: always()
         env:
           SEMANTIC_OUTCOME: ${{ steps.semantic.outcome }}
         run: |
           if [ "$SEMANTIC_OUTCOME" == "success" ]; then
-            echo "SEMANTIC_RELEASE_STATUS=success" >> $GITHUB_ENV
+            SEMANTIC_RELEASE_STATUS="success"
           else
-            echo "SEMANTIC_RELEASE_STATUS=failure" >> $GITHUB_ENV
+            SEMANTIC_RELEASE_STATUS="failure"
           fi
-          echo "Estatus Semantic Release Result $SEMANTIC_RELEASE_STATUS"
+      
+          # Almacena el estado en GITHUB_ENV para pasos futuros
+          echo "SEMANTIC_RELEASE_STATUS=$SEMANTIC_RELEASE_STATUS" >> $GITHUB_ENV
+      
+          # Imprimir en el mismo paso
+          echo "Estatus Semantic Release Result: $SEMANTIC_RELEASE_STATUS"
 
+      # 7. Obtener la versión de release
       - name: Get Release Version
         if: always()
         env:
           SEMANTIC_RELEASE_VERSION: ${{ steps.semantic.outputs.release-version }}
         run: |
           if [ -n "$SEMANTIC_RELEASE_VERSION" ]; then
-            echo "RELEASE_VERSION=$SEMANTIC_RELEASE_VERSION" >> $GITHUB_ENV
+            # Asegurarse de que la etiqueta tenga el prefijo 'v'
+            echo "RELEASE_VERSION=v$SEMANTIC_RELEASE_VERSION" >> $GITHUB_ENV
           else
+            # Si no hay salida de Semantic Release, obtener la última etiqueta
             LAST_TAG=$(git describe --tags --abbrev=0 || echo "")
             if [ -n "$LAST_TAG" ]; then
               echo "RELEASE_VERSION=$LAST_TAG" >> $GITHUB_ENV
             else
+              # Como último recurso, obtener la versión de package.json
               VERSION=$(jq -r '.version' package.json)
               echo "RELEASE_VERSION=v$VERSION" >> $GITHUB_ENV
             fi
           fi
           echo "Detected release version: $RELEASE_VERSION"
 
+      # 8. Simulación de un fallo para probar el rollback (Eliminar en producción)
       - name: Force Failure
         run: |
           echo "Forzando un error para probar el rollback"
           exit 1
 
+      # 9. Rollback en caso de fallo
       - name: Rollback on Failure
         if: failure() || env.SEMANTIC_RELEASE_STATUS == 'failure'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: |
-          echo "Initiating rollback due to failure."
-          sleep 10
+          echo "### Initiating rollback due to failure."
+          sleep 5  # Breve pausa antes de iniciar el rollback
           
+          # Si RELEASE_VERSION no está definida, intentar obtenerla
           if [ -z "$RELEASE_VERSION" ]; then
-            # Intentar obtener la versión del release fallido
+            echo "RELEASE_VERSION is not defined. Attempting to retrieve it from tags."
+            # Intentar obtener la versión del release fallido desde la etiqueta en HEAD
             RELEASE_VERSION=$(git tag --points-at HEAD | grep '^v' || echo "")
-            if [ -z "$RELEASE_VERSION" ]; then
+            if [ -n "$RELEASE_VERSION" ]; then
+              echo "RELEASE_VERSION found in HEAD: $RELEASE_VERSION"
+            else
+              echo "No tag found in HEAD. Trying to get the latest tag."
               # Si no hay etiqueta en HEAD, buscar la última etiqueta
               RELEASE_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$RELEASE_VERSION" ]; then
+                echo "Latest tag found: $RELEASE_VERSION"
+              else
+                echo "No tags found in the repository."
+              fi
             fi
+          else
+            echo "RELEASE_VERSION is already defined: $RELEASE_VERSION"
           fi
           
+          # Si se detecta una versión de release, proceder con el rollback
           if [ -n "$RELEASE_VERSION" ]; then
-            echo "Detected release version: $RELEASE_VERSION"
+            echo "### Detected release version for rollback: $RELEASE_VERSION"
           
             # Eliminar el release en GitHub
+            echo "Fetching release ID for tag $RELEASE_VERSION from GitHub."
             RELEASE_ID=$(curl -s \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/releases/tags/$RELEASE_VERSION" | jq -r .id)
           
             if [ "$RELEASE_ID" != "null" ]; then
+              echo "Release ID for $RELEASE_VERSION found: $RELEASE_ID. Proceeding to delete release on GitHub."
               curl -s -X DELETE \
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
-              echo "Deleted release with ID $RELEASE_ID"
+              echo "Deleted release with ID $RELEASE_ID from GitHub."
             else
-              echo "No release found for tag $RELEASE_VERSION"
+              echo "No release found on GitHub for tag $RELEASE_VERSION."
             fi
           
             # Eliminar la etiqueta remota
-            git push --delete origin $RELEASE_VERSION || true
+            echo "Attempting to delete remote tag $RELEASE_VERSION."
+            git push --delete origin $RELEASE_VERSION || echo "Warning: Could not delete remote tag $RELEASE_VERSION."
           
             # Eliminar la etiqueta local
-            git tag -d $RELEASE_VERSION || true
+            echo "Attempting to delete local tag $RELEASE_VERSION."
+            git tag -d $RELEASE_VERSION || echo "Warning: Could not delete local tag $RELEASE_VERSION."
           else
-            echo "No release version detected. Skipping release and tag deletion."
+            echo "No release version detected. Skipping release and tag deletion steps."
           fi
           
           # Restablecer al estado del último commit remoto
-          git reset --hard origin/main
+          echo "Resetting local branch to match origin/main."
+          git reset --hard origin/main || echo "Error: Failed to reset to origin/main."
           
           # Limpiar el directorio de trabajo
-          git clean -fd
+          echo "Cleaning the working directory of untracked files and directories."
+          git clean -fd || echo "Warning: Failed to clean the working directory."
           
           # Forzar un push para sincronizar con el repositorio remoto
-          git push --force || true
+          echo "Force pushing to synchronize local branch with remote repository."
+          git push --force || echo "Warning: Force push to remote repository failed."
+          
+          echo "### Rollback process completed."
+    
