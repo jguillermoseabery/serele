@@ -97,84 +97,84 @@ jobs:
           echo "Forzando un error para probar el rollback"
           exit 1
 
-      # 9. Rollback en caso de fallo
-      - name: Rollback on Failure
-        if: failure() || env.SEMANTIC_RELEASE_STATUS == 'failure'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
-        run: |
-          echo "### Initiating rollback due to failure."
-          sleep 5  # Breve pausa antes de iniciar el rollback
-          
-          # Si RELEASE_VERSION no está definida, intentar obtenerla
-          if [ -z "$RELEASE_VERSION" ]; then
-            echo "RELEASE_VERSION is not defined. Attempting to retrieve it from tags."
-            # Intentar obtener la versión del release fallido desde la etiqueta en HEAD
-            RELEASE_VERSION=$(git tag --points-at HEAD | grep '^v' || echo "")
-            if [ -n "$RELEASE_VERSION" ]; then
-              echo "RELEASE_VERSION found in HEAD: $RELEASE_VERSION"
-            else
-              echo "No tag found in HEAD. Trying to get the latest tag."
-              # Si no hay etiqueta en HEAD, buscar la última etiqueta
-              RELEASE_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-              if [ -n "$RELEASE_VERSION" ]; then
-                echo "Latest tag found: $RELEASE_VERSION"
-              else
-                echo "No tags found in the repository."
-              fi
-            fi
-          else
-            echo "RELEASE_VERSION is already defined: $RELEASE_VERSION"
-          fi
-          
-          # Si se detecta una versión de release, proceder con el rollback
-          if [ -n "$RELEASE_VERSION" ]; then
-            echo "### Detected release version for rollback: $RELEASE_VERSION"
-          
-            # Eliminar el release en GitHub
-            echo "Fetching release ID for tag $RELEASE_VERSION from GitHub."
-            RELEASE_ID=$(curl -s \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/tags/$RELEASE_VERSION" | jq -r .id)
-          
-            if [ "$RELEASE_ID" != "null" ]; then
-              echo "Release ID for $RELEASE_VERSION found: $RELEASE_ID. Proceeding to delete release on GitHub."
-              curl -s -X DELETE \
-                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
-              echo "Deleted release with ID $RELEASE_ID from GitHub."
-            else
-              echo "No release found on GitHub for tag $RELEASE_VERSION."
-            fi
-          
-            # Eliminar la etiqueta remota
-            echo "Attempting to delete remote tag $RELEASE_VERSION."
-            git push --delete origin $RELEASE_VERSION || echo "Warning: Could not delete remote tag $RELEASE_VERSION."
-          
-            # Eliminar la etiqueta local
-            echo "Attempting to delete local tag $RELEASE_VERSION."
-            git tag -d $RELEASE_VERSION || echo "Warning: Could not delete local tag $RELEASE_VERSION."
-          else
-            echo "No release version detected. Skipping release and tag deletion steps."
-          fi
-          
-          # Restablecer al estado del último commit remoto
-          echo "Resetting local branch to match origin/main."
-          git reset --hard origin/main || echo "Error: Failed to reset to origin/main."
-          
-          # Limpiar el directorio de trabajo
-          echo "Cleaning the working directory of untracked files and directories."
-          git clean -fd || echo "Warning: Failed to clean the working directory."
-          
-          # Forzar un push para sincronizar con el repositorio remoto
-          echo "Force pushing to synchronize local branch with remote repository."
-          git push --force || echo "Warning: Force push to remote repository failed."
-          
-          echo "###########################################################"
-          echo "### ROLLBACK COMPLETED SUCCESSFULLY. EXITING PIPELINE. ###"
-          echo "###########################################################"
-          exit 0
-    
+#      # 9. Rollback en caso de fallo
+#      - name: Rollback on Failure
+#        if: failure() || env.SEMANTIC_RELEASE_STATUS == 'failure'
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+#        run: |
+#          echo "### Initiating rollback due to failure."
+#          sleep 5  # Breve pausa antes de iniciar el rollback
+#
+#          # Si RELEASE_VERSION no está definida, intentar obtenerla
+#          if [ -z "$RELEASE_VERSION" ]; then
+#            echo "RELEASE_VERSION is not defined. Attempting to retrieve it from tags."
+#            # Intentar obtener la versión del release fallido desde la etiqueta en HEAD
+#            RELEASE_VERSION=$(git tag --points-at HEAD | grep '^v' || echo "")
+#            if [ -n "$RELEASE_VERSION" ]; then
+#              echo "RELEASE_VERSION found in HEAD: $RELEASE_VERSION"
+#            else
+#              echo "No tag found in HEAD. Trying to get the latest tag."
+#              # Si no hay etiqueta en HEAD, buscar la última etiqueta
+#              RELEASE_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+#              if [ -n "$RELEASE_VERSION" ]; then
+#                echo "Latest tag found: $RELEASE_VERSION"
+#              else
+#                echo "No tags found in the repository."
+#              fi
+#            fi
+#          else
+#            echo "RELEASE_VERSION is already defined: $RELEASE_VERSION"
+#          fi
+#
+#          # Si se detecta una versión de release, proceder con el rollback
+#          if [ -n "$RELEASE_VERSION" ]; then
+#            echo "### Detected release version for rollback: $RELEASE_VERSION"
+#
+#            # Eliminar el release en GitHub
+#            echo "Fetching release ID for tag $RELEASE_VERSION from GitHub."
+#            RELEASE_ID=$(curl -s \
+#              -H "Authorization: Bearer $GITHUB_TOKEN" \
+#              -H "Accept: application/vnd.github+json" \
+#              "https://api.github.com/repos/${{ github.repository }}/releases/tags/$RELEASE_VERSION" | jq -r .id)
+#
+#            if [ "$RELEASE_ID" != "null" ]; then
+#              echo "Release ID for $RELEASE_VERSION found: $RELEASE_ID. Proceeding to delete release on GitHub."
+#              curl -s -X DELETE \
+#                -H "Authorization: Bearer $GITHUB_TOKEN" \
+#                -H "Accept: application/vnd.github+json" \
+#                "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+#              echo "Deleted release with ID $RELEASE_ID from GitHub."
+#            else
+#              echo "No release found on GitHub for tag $RELEASE_VERSION."
+#            fi
+#
+#            # Eliminar la etiqueta remota
+#            echo "Attempting to delete remote tag $RELEASE_VERSION."
+#            git push --delete origin $RELEASE_VERSION || echo "Warning: Could not delete remote tag $RELEASE_VERSION."
+#
+#            # Eliminar la etiqueta local
+#            echo "Attempting to delete local tag $RELEASE_VERSION."
+#            git tag -d $RELEASE_VERSION || echo "Warning: Could not delete local tag $RELEASE_VERSION."
+#          else
+#            echo "No release version detected. Skipping release and tag deletion steps."
+#          fi
+#
+#          # Restablecer al estado del último commit remoto
+#          echo "Resetting local branch to match origin/main."
+#          git reset --hard origin/main || echo "Error: Failed to reset to origin/main."
+#
+#          # Limpiar el directorio de trabajo
+#          echo "Cleaning the working directory of untracked files and directories."
+#          git clean -fd || echo "Warning: Failed to clean the working directory."
+#
+#          # Forzar un push para sincronizar con el repositorio remoto
+#          echo "Force pushing to synchronize local branch with remote repository."
+#          git push --force || echo "Warning: Force push to remote repository failed."
+#
+#          echo "###########################################################"
+#          echo "### ROLLBACK COMPLETED SUCCESSFULLY. EXITING PIPELINE. ###"
+#          echo "###########################################################"
+#          exit 0
+#
