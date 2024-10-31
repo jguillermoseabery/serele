@@ -59,11 +59,9 @@ jobs:
           if [ "$SEMANTIC_OUTCOME" == "success" ]; then
             echo "New release was published."
             SEMANTIC_RELEASE_STATUS="success"
-            echo "NEW_RELEASE_PUBLISHED=true" >> $GITHUB_ENV
           else
             echo "No new release was published."
             SEMANTIC_RELEASE_STATUS="failure"
-            echo "NEW_RELEASE_PUBLISHED=false" >> $GITHUB_ENV
           fi
       
           # Almacena el estado en GITHUB_ENV para pasos futuros
@@ -96,7 +94,7 @@ jobs:
 
       # 8. Simulación de un fallo para probar el rollback (Eliminar en producción)
       - name: Force Failure
-        if: env.NEW_RELEASE_PUBLISHED == 'true'
+        if: ${{ steps.semantic.outputs.new-release-published == 'true' }}
         run: |
           echo "Forzando un error para probar el rollback"
           exit 1
