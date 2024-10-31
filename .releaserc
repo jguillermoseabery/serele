@@ -1,0 +1,26 @@
+{
+  "branches": ["main"],
+  "debug": true,
+  "ci": true,
+  "dryRun": false,
+  "plugins":
+    [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      [
+        "@semantic-release/github",
+        {
+          "assets": [
+            { "path": "release/*.snap", "label": "Snap" }          ]
+        }
+      ],
+      "@semantic-release/npm",
+      [
+        "@semantic-release/git",
+        {
+          "assets": ["package.json", "package-lock.json", "app/package.json", "app/package-lock.json"],
+          "message": "Release <%= nextRelease.version %> - <%= new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' }) %> [skip ci]\n\n<%= nextRelease.notes %>"
+        }
+      ]
+    ]
+}

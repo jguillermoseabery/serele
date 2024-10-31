@@ -1,0 +1,16 @@
+{
+  "name": "semanticrelease",
+  "version": "2.0.0",
+  "author": "User",
+  "license": "",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "build": "npm run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/npm": "^12.0.1"
+  }
+}
