@@ -19,17 +19,17 @@ jobs:
     name: Build Binaries
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout del repositorio con todas las etiquetas y el historial completo
+      # 1. Checkout of the repository with all tags and full history
       - name: Checkout repo
         uses: actions/checkout@v3
         with:
           fetch-depth: 0  # Importante para obtener todas las etiquetas
 
-      # 2. Instalación de 'jq' para procesar JSON
+      # 2. Installation of 'jq' to process JSON
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 3. Configuración del entorno de Node.js
+      # 3. Configuration of the Node.js environment
       - name: Setup Node.js environment
         uses: actions/setup-node@v3
         with:
@@ -37,11 +37,11 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
 
-      # 4. Instalación de dependencias
+      # 4. Installation of dependencies
       - name: Install Dependencies
         run: npm ci
 
-      # 5. Ejecución de Semantic Release
+      # 5. Execution of Semantic Release
       - name: Semantic Release
         id: semantic
         uses: codfish/semantic-release-action@v2
@@ -50,7 +50,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true  # Permite que el workflow continúe incluso si este paso falla
 
-      # 6. Capturar el resultado de Semantic Release
+      # 6. Capture the result of Semantic Release
       - name: Set Semantic Release Result
         if: always()
         env:
@@ -70,7 +70,7 @@ jobs:
           # Imprimir en el mismo paso
           echo "SEMANTIC RELEASE STATUS: $SEMANTIC_RELEASE_STATUS"
 
-      # 7. Obtener la versión de release
+      # 7. Retrieve the release version
       - name: Get Release Version
         if: always()
         env:
@@ -92,14 +92,14 @@ jobs:
           fi
           echo "Detected release version: $RELEASE_VERSION"
 
-      # 8. Simulación de un fallo para probar el rollback (Eliminar en producción)
+      # 8. Simulation of a failure to test the rollback (Remove in production)
       - name: Force Failure
         if: ${{ steps.semantic.outputs.new-release-published == 'true' }}
         run: |
-          echo "Forzando un error para probar el rollback"
+          echo "Simulation of a failure to test the rollback."
           exit 1
 
-      # 9. Rollback en caso de fallo
+      # 9. Rollback in case of failure
       - name: Rollback on Failure
         if: failure() || env.SEMANTIC_RELEASE_STATUS == 'failure'
         env:
@@ -107,18 +107,18 @@ jobs:
           RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: |
           echo "### Initiating rollback due to failure."
-          sleep 5  # Breve pausa antes de iniciar el rollback
+          sleep 5  # Short pause before starting the rollback
 
-          # Si RELEASE_VERSION no está definida, intentar obtenerla
+          # If RELEASE_VERSION is not defined, attempt to retrieve it
           if [ -z "$RELEASE_VERSION" ]; then
             echo "RELEASE_VERSION is not defined. Attempting to retrieve it from tags."
-            # Intentar obtener la versión del release fallido desde la etiqueta en HEAD
+            # Attempt to get the failed release version from the tag in HEAD
             RELEASE_VERSION=$(git tag --points-at HEAD | grep '^v' || echo "")
             if [ -n "$RELEASE_VERSION" ]; then
               echo "RELEASE_VERSION found in HEAD: $RELEASE_VERSION"
             else
               echo "No tag found in HEAD. Trying to get the latest tag."
-              # Si no hay etiqueta en HEAD, buscar la última etiqueta
+              # If no tag is in HEAD, try to get the latest tag
               RELEASE_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
               if [ -n "$RELEASE_VERSION" ]; then
                 echo "Latest tag found: $RELEASE_VERSION"
@@ -130,11 +130,11 @@ jobs:
             echo "RELEASE_VERSION is already defined: $RELEASE_VERSION"
           fi
 
-          # Si se detecta una versión de release, proceder con el rollback
+          # If a release version is detected, proceed with the rollback
           if [ -n "$RELEASE_VERSION" ]; then
             echo "### Detected release version for rollback: $RELEASE_VERSION"
 
-            # Eliminar el release en GitHub
+            # Delete the release on GitHub
             echo "Fetching release ID for tag $RELEASE_VERSION from GitHub."
             RELEASE_ID=$(curl -s \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -152,26 +152,26 @@ jobs:
               echo "No release found on GitHub for tag $RELEASE_VERSION."
             fi
 
-            # Eliminar la etiqueta remota
+            # Attempting to delete remote tag
             echo "Attempting to delete remote tag $RELEASE_VERSION."
             git push --delete origin $RELEASE_VERSION || echo "Warning: Could not delete remote tag $RELEASE_VERSION."
 
-            # Eliminar la etiqueta local
+            # Attempting to delete local tag
             echo "Attempting to delete local tag $RELEASE_VERSION."
             git tag -d $RELEASE_VERSION || echo "Warning: Could not delete local tag $RELEASE_VERSION."
           else
             echo "No release version detected. Skipping release and tag deletion steps."
           fi
 
-          # Restablecer al estado del último commit remoto
+          # Reset to the state of the last remote commit
           echo "Resetting local branch to match origin/main."
           git reset --hard origin/main || echo "Error: Failed to reset to origin/main."
 
-          # Limpiar el directorio de trabajo
+          # Clean the working directory of untracked files and directories
           echo "Cleaning the working directory of untracked files and directories."
           git clean -fd || echo "Warning: Failed to clean the working directory."
 
-          # Forzar un push para sincronizar con el repositorio remoto
+          # Force push to synchronize with the remote repository
           echo "Force pushing to synchronize local branch with remote repository."
           git push --force || echo "Warning: Force push to remote repository failed."
 
@@ -179,4 +179,3 @@ jobs:
           echo "### ROLLBACK COMPLETED SUCCESSFULLY. EXITING PIPELINE. ###"
           echo "###########################################################"
           exit 0
-
