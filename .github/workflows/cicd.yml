@@ -92,6 +92,7 @@ jobs:
 
       # 8. Simulación de un fallo para probar el rollback (Eliminar en producción)
       - name: Force Failure
+        if: success() && env.SEMANTIC_RELEASE_STATUS == 'success'
         run: |
           echo "Forzando un error para probar el rollback"
           exit 1
@@ -172,5 +173,8 @@ jobs:
           echo "Force pushing to synchronize local branch with remote repository."
           git push --force || echo "Warning: Force push to remote repository failed."
           
-          echo "### Rollback process completed."
+          echo "###########################################################"
+          echo "### ROLLBACK COMPLETED SUCCESSFULLY. EXITING PIPELINE. ###"
+          echo "###########################################################"
+          exit 0
     
